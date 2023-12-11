@@ -8,4 +8,8 @@ Minimal examples to use libsnark.
 - https://github.com/howardwu/libsnark-tutorial
 
 git submodule init && git submodule update
+cd depends/libsnark
 mkdir build && cd build && cmake ..
+make
+
+
