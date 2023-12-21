@@ -7,11 +7,15 @@
 #include <libsnark/common/default_types/r1cs_se_ppzksnark_pp.hpp>
 #include <libsnark/zk_proof_systems/ppzksnark/r1cs_se_ppzksnark/r1cs_se_ppzksnark.hpp>
 
-#include <iostream>
+#include <vector>
+#include <string>
 #include <chrono>
 #include <cstdlib>
+#include <iostream>
 #include <fstream>
 #include <sstream>
+
+#include <openssl/sha.h>
 
 using namespace libsnark;
 
@@ -130,6 +134,50 @@ void test_r1cs_se_ppzksnark(size_t num_constraints, size_t input_size, std::ofst
 
 }
 
+// 假设 BigInt 是一个类似于 big.Int 的 C++ 类型
+using BigInt = std::vector<uint8_t>;
+
+BigInt HashtoiInt(const std::string& strhash) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, strhash.c_str(), strhash.size());
+    SHA256_Final(hash, &sha256);
+
+    return BigInt(hash, hash + SHA256_DIGEST_LENGTH);
+}
+
+// std::tuple<BigInt, BigInt, BigInt, BigInt> PitoHashtoInt(const Proof& proof) {
+//     std::vector<BigInt> aInt;
+//     for (int i = 0; i < 3; ++i) {
+//         aInt.push_back(proof.PiA[i]);
+//     }
+//     std::string strA = arrayToString(aInt); // 实现 arrayToString 函数
+//     BigInt hashInta = HashtoiInt(strA);
+
+//     std::vector<BigInt> bInt;
+//     for (int i = 0; i < 3; ++i) {
+//         for (int j = 0; j < 2; ++j) {
+//             bInt.push_back(proof.PiB[i][j]);
+//         }
+//     }
+//     std::string strB = arrayToString(bInt); // 实现 arrayToString 函数
+//     BigInt hashIntb = HashtoiInt(strB);
+
+//     return std::make_tuple(hashInta, hashIntb, aInt[0], bInt[0]);
+// }
+
+// 实现 arrayToString 函数
+std::string arrayToString(const std::vector<BigInt>& array) {
+    std::stringstream ss;
+    for (const auto& item : array) {
+        for (auto byte : item) {
+            ss << std::hex << static_cast<int>(byte);
+        }
+    }
+    return ss.str();
+}
+
 int main(int argc, char* argv[]) {
     // 设置默认值
     int num_constraints = 10000;
@@ -164,15 +212,22 @@ int main(int argc, char* argv[]) {
         std::cerr << "Unable to open file for writing." << std::endl;
         return 1;
     }
-    outfile << "Constraints Num:"<< num_constraints << std::endl;
-    outfile << "Input Size:"<< input_size << std::endl;
 
     if (scheme == "groth16") {
+        outfile << "Constraints Num:"<< num_constraints << std::endl;
+        outfile << "Input Size:"<< input_size << std::endl;
         default_r1cs_gg_ppzksnark_pp::init_public_params();
         test_r1cs_gg_ppzksnark<default_r1cs_gg_ppzksnark_pp>(num_constraints, input_size, outfile);
     } else if (scheme == "gm17") {
+        outfile << "Constraints Num:"<< num_constraints << std::endl;
+        outfile << "Input Size:"<< input_size << std::endl;
         default_r1cs_se_ppzksnark_pp::init_public_params();
         test_r1cs_se_ppzksnark<default_r1cs_se_ppzksnark_pp>(num_constraints, input_size, outfile);
+    } else if (scheme == "sha") {
+        std::vector<BigInt>* testValue = new std::vector<BigInt>();
+        // TODO 这里存在一些类型转换的问题
+        std::string strValue = arrayToString(*testValue);
+        std::cout<<""<<std::endl;
     } else {
         std::cerr << "Invalid scheme. Available schemes: groth16, gm17" << std::endl;
         return 1;
