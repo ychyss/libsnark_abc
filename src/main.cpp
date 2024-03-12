@@ -7,6 +7,8 @@
 #include <libsnark/common/default_types/r1cs_se_ppzksnark_pp.hpp>
 #include <libsnark/zk_proof_systems/ppzksnark/r1cs_se_ppzksnark/r1cs_se_ppzksnark.hpp>
 
+#include <libsnark/zk_proof_systems/ppzksnark/r1cs_h_se_ppzksnark/r1cs_h_se_ppzksnark.hpp>
+
 #include <vector>
 #include <string>
 #include <chrono>
@@ -119,6 +121,52 @@ bool run_r1cs_se_ppzksnark(const r1cs_example<libff::Fr<ppT> > &example, std::of
 }
 
 template<typename ppT>
+bool run_r1cs_h_se_ppzksnark(const r1cs_example<libff::Fr<ppT> > &example, std::ofstream& outfile)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    outfile << "================================================================================\n";
+    outfile << "ALgorithm: R1CS H SE GG-ppzkSNARK Generator\n";
+    outfile << "================================================================================\n";
+    // 密钥对
+    start = std::chrono::high_resolution_clock::now();
+    r1cs_h_se_ppzksnark_keypair<ppT> keypair = r1cs_h_se_ppzksnark_generator<ppT>(example.constraint_system);
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - start; outfile<< "Gen Key Time: " << elapsed.count() << "s" << std::endl;
+    //  hash2Int(arrayToString(strings))<< std::endl; // 不同的曲线，可能出现不同的处理情况
+    // keypair.vk.delta_g1.print_coordinates();
+    // 预处理vk
+    start = std::chrono::high_resolution_clock::now();
+    r1cs_h_se_ppzksnark_processed_verification_key<ppT> pvk = r1cs_h_se_ppzksnark_verifier_process_vk<ppT>(keypair.vk);
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - start; outfile<< "Preprocess Time: " << elapsed.count() << "s" << std::endl;
+    // 生成证明
+    start = std::chrono::high_resolution_clock::now();
+    r1cs_h_se_ppzksnark_proof<ppT> proof = r1cs_h_se_ppzksnark_prover<ppT>(keypair.pk, example.primary_input, example.auxiliary_input);
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - start; outfile<< "Prove Time: " << elapsed.count() << "s" << std::endl;
+    
+    // 验证
+    start = std::chrono::high_resolution_clock::now();
+    const bool ans = r1cs_h_se_ppzksnark_verifier_strong_IC<ppT>(keypair.vk, example.primary_input, proof);
+    printf("* The verification result is: %s\n", (ans ? "PASS" : "FAIL"));
+    outfile << "The verification result is: " << (ans ? "PASS" : "FAIL") << std::endl;
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - start; outfile<< "Verify Time: " << elapsed.count() << "s" << std::endl;
+    // 
+    start = std::chrono::high_resolution_clock::now();
+    const bool ans2 = r1cs_h_se_ppzksnark_online_verifier_strong_IC<ppT>(pvk, example.primary_input, proof);
+    assert(ans == ans2);
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - start; outfile<< "Online Verify Time: " << elapsed.count() << "s" << std::endl;
+
+    outfile << "================================================================================\n\n";
+    outfile.close();
+    return ans;
+}
+
+template<typename ppT>
 void test_r1cs_gg_ppzksnark(size_t num_constraints, size_t input_size, std::ofstream& outfile)
 {
     r1cs_example<libff::Fr<ppT> > example = generate_r1cs_example_with_binary_input<libff::Fr<ppT> >(num_constraints, input_size);
@@ -132,6 +180,15 @@ void test_r1cs_se_ppzksnark(size_t num_constraints, size_t input_size, std::ofst
     r1cs_example<libff::Fr<ppT> > example = generate_r1cs_example_with_binary_input<libff::Fr<ppT> >(num_constraints, input_size);
     const bool bit = run_r1cs_se_ppzksnark<ppT>(example, outfile);
 
+}
+
+template<typename ppT>
+void test_r1cs_h_se_ppzksnark(size_t num_constraints, size_t input_size, std::ofstream& outfile)
+{
+    // 这个是生成r1cs约束的例子，不设计电路就用这个
+    r1cs_example<libff::Fr<ppT> > example = generate_r1cs_example_with_binary_input<libff::Fr<ppT> >(num_constraints, input_size);
+    const bool bit = run_r1cs_h_se_ppzksnark<ppT>(example, outfile);
+    assert(bit);
 }
 
 // 假设 BigInt 是一个类似于 big.Int 的 C++ 类型
@@ -185,7 +242,7 @@ int main(int argc, char* argv[]) {
 
     if (argc < 2 || argc > 4) {
         std::cerr << "Usage: " << argv[0] << " <scheme> [num_constraints] [input_size]" << std::endl;
-        std::cerr << "Available schemes: groth16, gm17" << std::endl;
+        std::cerr << "Available schemes: groth16, gm17, hse" << std::endl;
         return 1;
     }
 
@@ -213,6 +270,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+
+    outfile << "================================================================================\n";
     if (scheme == "groth16") {
         outfile << "Constraints Num:"<< num_constraints << std::endl;
         outfile << "Input Size:"<< input_size << std::endl;
@@ -228,7 +287,12 @@ int main(int argc, char* argv[]) {
         // TODO 这里存在一些类型转换的问题
         std::string strValue = arrayToString(*testValue);
         std::cout<<""<<std::endl;
-    } else {
+    } else if (scheme == "hse") {
+        outfile << "Constraints Num:"<< num_constraints << std::endl;
+        outfile << "Input Size:"<< input_size << std::endl;
+        default_r1cs_gg_ppzksnark_pp::init_public_params();
+        test_r1cs_h_se_ppzksnark<default_r1cs_gg_ppzksnark_pp>(num_constraints, input_size, outfile);
+    }else {
         std::cerr << "Invalid scheme. Available schemes: groth16, gm17" << std::endl;
         return 1;
     }
